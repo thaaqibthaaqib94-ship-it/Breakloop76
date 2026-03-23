@@ -1,0 +1,170 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: habits
+    // Document ID: habitId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required, 1-100 chars)
+    //   - streak: number (required, >= 0)
+    //   - totalAtoms: number (required, >= 0)
+    //   - totalAttempts: number (required, >= 1)
+    //   - mode: string (required, 'streak' or 'time')
+    //   - createdAt: number (required)
+    //   - currentAttemptId: string (required)
+    //   - userId: string (required, must match auth.uid)
+    //
+    // Collection: logs
+    // Document ID: logId
+    // Fields:
+    //   - id: string (required)
+    //   - habitId: string (required)
+    //   - attemptId: string (required)
+    //   - timestamp: number (required)
+    //   - status: string (required, 'controlled' or 'failed')
+    //   - reason: string (optional)
+    //   - userId: string (required, must match auth.uid)
+    //
+    // Collection: attempts
+    // Document ID: attemptId
+    // Fields:
+    //   - id: string (required)
+    //   - habitId: string (required)
+    //   - number: number (required, >= 1)
+    //   - startDate: number (required)
+    //   - endDate: number (optional)
+    //   - controlsCount: number (required, >= 0)
+    //   - streakReached: number (required, >= 0)
+    //   - failureReason: string (optional)
+    //   - userId: string (required, must match auth.uid)
+    //
+    // Collection: settings
+    // Document ID: userId
+    // Fields:
+    //   - userId: string (required, must match auth.uid)
+    //   - goal: map (optional)
+    //   - bgColor: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function incomingDocOwner() {
+      return isAuthenticated() && request.auth.uid == request.resource.data.userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isRecent(timestamp) {
+      return timestamp is number && 
+             timestamp > (request.time.toMillis() - 60000) && 
+             timestamp < (request.time.toMillis() + 60000);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidHabit(data) {
+      return hasRequiredFields(['id', 'name', 'streak', 'totalAtoms', 'totalAttempts', 'mode', 'createdAt', 'currentAttemptId', 'userId']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.streak is number && data.streak >= 0 &&
+             data.totalAtoms is number && data.totalAtoms >= 0 &&
+             data.totalAttempts is number && data.totalAttempts >= 1 &&
+             data.mode in ['streak', 'time'] &&
+             data.createdAt is number &&
+             data.currentAttemptId is string &&
+             data.userId is string;
+    }
+
+    function isValidLog(data) {
+      return hasRequiredFields(['id', 'habitId', 'attemptId', 'timestamp', 'status', 'userId']) &&
+             data.id is string &&
+             data.habitId is string &&
+             data.attemptId is string &&
+             data.timestamp is number &&
+             data.status in ['controlled', 'failed'] &&
+             (!('reason' in data) || data.reason is string) &&
+             data.userId is string;
+    }
+
+    function isValidAttempt(data) {
+      return hasRequiredFields(['id', 'habitId', 'number', 'startDate', 'controlsCount', 'streakReached', 'userId']) &&
+             data.id is string &&
+             data.habitId is string &&
+             data.number is number && data.number >= 1 &&
+             data.startDate is number &&
+             (!('endDate' in data) || data.endDate is number) &&
+             data.controlsCount is number && data.controlsCount >= 0 &&
+             data.streakReached is number && data.streakReached >= 0 &&
+             (!('failureReason' in data) || data.failureReason is string) &&
+             data.userId is string;
+    }
+
+    function isValidSettings(data) {
+      return hasRequiredFields(['userId']) &&
+             data.userId is string &&
+             (!('goal' in data) || (data.goal is map && data.goal.keys().hasAll(['targetStreak', 'label']))) &&
+             (!('bgColor' in data) || data.bgColor is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /habits/{habitId} {
+      allow read: if isAuthenticated() && (resource == null || isDocOwner());
+      allow create: if incomingDocOwner() && isValidHabit(request.resource.data);
+      allow update: if isDocOwner() && incomingDocOwner() && isValidHabit(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /logs/{logId} {
+      allow read: if isAuthenticated() && (resource == null || isDocOwner());
+      allow create: if incomingDocOwner() && isValidLog(request.resource.data);
+      allow update: if isDocOwner() && incomingDocOwner() && isValidLog(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /attempts/{attemptId} {
+      allow read: if isAuthenticated() && (resource == null || isDocOwner());
+      allow create: if incomingDocOwner() && isValidAttempt(request.resource.data);
+      allow update: if isDocOwner() && incomingDocOwner() && isValidAttempt(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /settings/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidSettings(request.resource.data);
+      allow update: if isOwner(userId) && isValidSettings(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "Habit": {
+      "title": "Habit",
+      "description": "A habit being tracked by the user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "streak": { "type": "integer" },
+        "totalAtoms": { "type": "integer" },
+        "totalAttempts": { "type": "integer" },
+        "mode": { "type": "string", "enum": ["streak", "time"] },
+        "createdAt": { "type": "integer" },
+        "currentAttemptId": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "name", "streak", "totalAtoms", "totalAttempts", "mode", "createdAt", "currentAttemptId", "userId"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "An activity log for a habit.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "habitId": { "type": "string" },
+        "attemptId": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "status": { "type": "string", "enum": ["controlled", "failed"] },
+        "reason": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "habitId", "attemptId", "timestamp", "status", "userId"]
+    },
+    "Attempt": {
+      "title": "Attempt",
+      "description": "A specific attempt at a habit.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "habitId": { "type": "string" },
+        "number": { "type": "integer" },
+        "startDate": { "type": "integer" },
+        "endDate": { "type": "integer" },
+        "controlsCount": { "type": "integer" },
+        "streakReached": { "type": "integer" },
+        "failureReason": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "habitId", "number", "startDate", "controlsCount", "streakReached", "userId"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "User specific settings.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "goal": {
+          "type": "object",
+          "properties": {
+            "targetStreak": { "type": "integer" },
+            "label": { "type": "string" }
+          }
+        },
+        "bgColor": { "type": "string" }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "Collection of habits."
+    },
+    "/logs/{logId}": {
+      "schema": "Log",
+      "description": "Collection of activity logs."
+    },
+    "/attempts/{attemptId}": {
+      "schema": "Attempt",
+      "description": "Collection of habit attempts."
+    },
+    "/settings/{userId}": {
+      "schema": "Settings",
+      "description": "User settings document."
+    }
+  }
+}
